@@ -21,8 +21,8 @@ A lotsawa `text.md` (contract in the lotsawa skill, "Output format"):
 - **Colophon** — Tibetan + translation (typeset as a rubric: Jomolhari 14 black + italic 11), then the
   translator-credit paragraph (`Colophon` style). Without front matter the document has no header, no cover image and no
   cover bottom block; the cover is the title block alone and the footer carries only the page number.
-- **Notes** — the last line equal to the notes label (default `Poznámky:`), then one note per line, each opening with its
-  roman numeral (`i`, `ii`, ...).
+- **Notes** — the last line equal to (or starting with) the notes label (default `Poznámky:`); text after the label on that
+  line is the first note. Then one note per line, each opening with its roman numeral (`i`, `ii`, ...).
 
 Optional extensions (all invisible to a plain lotsawa text, add only what you need):
 
@@ -70,22 +70,28 @@ line with no Tibetan before it is its own group. First matching rule wins:
 | # | Condition | Result |
 |---|---|---|
 | a | `L[0]` starts `#` / `##` | Heading1 / Heading2 (+ Tibetan line as Heading1Tib / Heading2Tib) |
+| a2 | first group of a body without title block, starts with `༄`, has Latin lines | Heading1Tib + Heading1 (first Latin line) + Translation for the rest (wins over b) |
 | b | TIB, `len(L)>=2`, `PHO(L[0])` | Verse: TibVerse, Phonetics, Translation for the rest |
 | c | TIB, `len(L)>=2`, not PHO | RubricTib + Rubric per line |
-| d | TIB, 1 Latin line, Tibetan ends `ནི` + `།`/`༔` | Heading1 (+ Heading1Tib) |
+| d | TIB, 1 Latin line of <= 12 words, Tibetan ends `ནི` + `།`/`༔` | Heading1 (+ Heading1Tib) |
 | e | TIB, 1 Latin line, `CAPS` | Mantra: TibVerse + MantraPhonetics |
 | f | TIB, 1 Latin line, `short()` | Heading2 (+ Heading2Tib) — heuristic, logged |
+| | (d, e-f) Tibetan starting `ཞེས` / `ཅེས` (after `༄༅`) | never a heading: falls to g |
 | g | TIB, 1 Latin line | RubricTib + Rubric |
-| h | TIB, no Latin line | TibVerse + warning |
+| h | TIB, no Latin line, next group starts `#` / `##` or the line ends `ནི།` | Heading1Tib / Heading2Tib (matching the `#` level; `ནི།` = level 1), no warning |
+| h | TIB, no Latin line, otherwise | TibVerse + warning |
 | i | no TIB, `CAPS` | Heading1 |
 | j | no TIB, after the last Tibetan line of the text | Colophon |
 | k | no TIB, `short()` | Heading2 — heuristic, logged |
 | l | no TIB | Rubric |
 
-`short()` is also false for a line wrapped entirely in `*…*` (an italic author line is a rubric, not a heading).
+`short()` is also false for a line wrapped entirely in `*…*` (an italic author line is a rubric, not a heading) and for a
+line whose first letter is lowercase (a continuation such as `složil …`).
+Preprocessing: a `TIB` line followed on the same line by >= 2 CAPS Latin words (glued phonetics) is split into the
+Tibetan line and a phonetics line.
 Markdown links `[text](url)` become `text` when one contains the other, else `text (url)`.
 
-`short(s)` = at most 8 words, last character not in `.:!,;?`, and no Czech 2nd-person-plural imperative (`\w+te`, `ete`,
+`short(s)` = at most 8 words, first letter not lowercase, last character not in `.:!,;?`, and no Czech 2nd-person-plural imperative (`\w+te`, `ete`,
 `ěte`, `jte`). It is Czech-only; for another target language expect misfires.
 
 In Rubric paragraphs, tokens of 2+ letters that are all uppercase (`OM AH HUNG HO`) become bold non-italic.
@@ -186,7 +192,7 @@ title, and the 36 pt gap above the cover bottom block.
 |---|---|
 | Tibetan blank in the render | Font not visible to LibreOffice: copy it into the bundle (step 0), or `tib_font` names a family that is not installed |
 | Tibetan boxes in Word | Set `tib_font` to the family name the recipient has (e.g. `Jomolhari-ID`) and rebuild |
-| `N endnote markers but M notes` | Marker not recognised (add `^` before the numeral, e.g. `slovo^v`), a stray numeral was taken as a marker, or the notes list is wrong. The message lists both sides |
+| `N endnote markers but M notes` | Marker not recognised (add `^` before the numeral, e.g. `slovo^v`), a stray numeral was taken as a marker, or the notes list is wrong. The message lists both sides. Build still succeeds (warning only): no endnotes, numerals stay as text, notes are plain `Colophon` paragraphs after `NotesLabel` |
 | Same error plus "superscript digits found" | Old-format text; not supported |
 | Heading misfire | `#` / `##` prefix to force a heading, trailing `.` to force a rubric |
 | Cover bottom block not at the page foot | By design: a fixed 36 pt gap (`GAP` constant), because a bottom-anchored `framePr` lands on the next page in LibreOffice. Pin it to the bottom margin by hand in Word if wanted |

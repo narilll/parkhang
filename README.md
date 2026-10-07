@@ -72,8 +72,11 @@ Přináším obětinu tsoku velké blaženosti a moudrosti,ii vnější i vnitř
 
 Heading vs. rubric is decided heuristically: a Tibetan line ending in the topic marker
 `ནི།` is a heading; a short Latin line with no final punctuation and no imperative is a
-heading. `--dry-run` shows every decision. A `#`/`##` prefix forces a heading, a trailing
-`.` forces a rubric.
+heading; a lowercase-initial line never is. Tibetan opening with `ཞེས`/`ཅེས` is a rubric, and a
+lone Tibetan line before a `#`/`##` heading (or ending `ནི།`) is a Tibetan heading. A first
+group starting with `༄༅` plus Latin lines is the title block. `--dry-run` shows every
+decision. A `#`/`##` prefix forces a heading, a trailing `.` forces a rubric. The notes label
+may carry the first note on its own line.
 
 ### Extensions
 
@@ -123,7 +126,8 @@ Cambria is substituted by the metric-compatible Caladea.
 ## Limits
 
 - Old interlinear texts with lowercase phonetics, an extra IAST line or `¹` superscripts
-  are rejected (marker/note mismatch), not mis-typeset.
+  trigger the marker/note mismatch warning: no endnotes are made, numerals stay in the text and
+  the notes are typeset as plain paragraphs at the end.
 - The cover bottom block sits 36 pt below the image instead of being pinned to the page
   foot; pin it by hand in Word if wanted.
 - `header1` (cycle name) cannot be derived from the text; pass it explicitly.

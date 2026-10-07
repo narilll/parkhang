@@ -14,6 +14,8 @@ editorial judgment call is a warning (exit 0). --dry-run lists paragraph styles 
 Stdlib only; raw OOXML via zipfile.
 """
 import argparse
+import contextlib
+import io
 import re
 import struct
 import sys
@@ -110,11 +112,13 @@ def is_caps(s):
 
 
 def short(s):
-    """Heading-like: <= 8 words, no closing punctuation, no Czech 2nd-pl imperative, not all italic."""
+    """Heading-like: <= 8 words, first letter not lowercase, no closing punctuation, no Czech 2nd-pl imperative, not all italic."""
     # ponytail: Czech-only heuristic; every use is logged as INFO for the agent to review
     s = s.strip()
     if s.startswith('*') and s.endswith('*'):
         return False
+    if next((c for c in s if c.isalpha()), 'A').islower():
+        return False                      # lowercase start = a continuation, never a heading
     return len(s.split()) <= 8 and s[-1:] not in '.:!,;?' and not IMPERATIVE_RE.search(s)
 
 
@@ -247,7 +251,7 @@ def latin_runs(text, marks=None, ln=0, rubric=False):
                 continue                      # literal text
             out += seg(text[pos:m.start()])
             marks.append((ln, m.group(0)))
-            out.append(R('^' + num, raw='<w:r><w:rPr><w:rStyle w:val="EndnoteReference"/></w:rPr>'
+            out.append(R(('^' if caret else '') + num, raw='<w:r><w:rPr><w:rStyle w:val="EndnoteReference"/></w:rPr>'
                                         f'<w:endnoteReference w:id="{len(marks)}"/></w:r>'))
         elif drum is not None:
             out += seg(text[pos:m.start()])
@@ -305,6 +309,15 @@ def title_block(rows):
     return None
 
 
+def split_pho(ln, t):
+    """Tibetan line with glued CAPS phonetics (>= 2 words) -> [(ln, tibetan), (ln, phonetics)]."""
+    end = max((m.end() for m in TIB_RE.finditer(t)), default=0)
+    pho = t[end:].strip()
+    if end and len(pho.split()) >= 2 and '>>' not in pho and is_caps(pho):
+        return [(ln, t[:end].rstrip()), (ln, pho)]
+    return [(ln, t)]
+
+
 def groups(rows):
     """rows -> [('sep',) | ('cue', ln, cue) | ('grp', [(ln, text, cue), ...])].
 
@@ -343,8 +356,10 @@ def groups(rows):
     return out
 
 
-def emit(g, last_tib, marks, paras):
+def emit(g, last_tib, marks, paras, first=False, nxt=''):
     """Classification rules a-k of the plan; appends paragraphs.
+
+    `first` = first group of a body without title block; `nxt` = first line of the next group.
 
     Group without Tibetan: CAPS (i) > after the last Tibetan line = Colophon (k) > short (j) > Rubric (k).
     """
@@ -365,10 +380,13 @@ def emit(g, last_tib, marks, paras):
         info(f'heading(heuristic) line {L[0][0]}: {L[0][1][:60]}')
         heading(2)
 
+    rub = bool(tl) and tl[1].lstrip('༄༅ \t').startswith(('ཞེས', 'ཅེས'))   # rubric opener, never a heading
     if L and L[0][1].startswith('#'):                                   # a
         lvl = 2 if L[0][1].startswith('##') else 1
         L[0] = (L[0][0], L[0][1].lstrip('#').strip(), L[0][2])
         heading(lvl)
+    elif first and tl and L and tl[1].lstrip().startswith('༄'):          # a2 (before b)
+        heading(1)
     elif tl is None:
         t = L[0][1]
         if is_caps(t):                                                  # i
@@ -379,6 +397,8 @@ def emit(g, last_tib, marks, paras):
             heuristic()
         else:                                                           # k
             add(L[0], 'Rubric', rubric=True)
+    elif not L and (nxt.startswith('#') or H1_TIB_RE.search(tl[1])):   # h: heading-like Tibetan alone
+        add(tl, f'Heading{2 if nxt.startswith("##") else 1}Tib', tib=True)
     elif not L:                                                         # h
         add(tl, 'TibVerse', tib=True)
         warn('build', f'line {tl[0]}: Tibetan line without a translation, typed as verse')
@@ -392,12 +412,12 @@ def emit(g, last_tib, marks, paras):
             add(tl, 'RubricTib', tib=True)
             for r in L:
                 add(r, 'Rubric', rubric=True)
-    elif H1_TIB_RE.search(tl[1]):                                       # d
+    elif H1_TIB_RE.search(tl[1]) and not rub and len(L[0][1].split()) <= 12:   # d
         heading(1)
     elif is_caps(L[0][1]):                                              # e
         add(tl, 'TibVerse', tib=True)
         add(L[0], 'MantraPhonetics')
-    elif short(L[0][1]):                                                # f
+    elif short(L[0][1]) and not rub:                                    # f
         heuristic()
     else:                                                               # g
         add(tl, 'RubricTib', tib=True)
@@ -591,12 +611,16 @@ def build(src, out, dry, cli=None):
     TIB_FONT = meta.get('tib_font', 'Jomolhari')
     label = meta.get('notes_label', 'Poznámky:')
     rows = [(i + 1, lines[i]) for i in range(fm, len(lines))]
+    rows = [r for ln, t in rows for r in split_pho(ln, t)]
 
-    ni = next((k for k in range(len(rows) - 1, -1, -1) if rows[k][1].strip() == label), None)
-    notes, body = [], rows
+    ni = next((k for k in range(len(rows) - 1, -1, -1)
+               if rows[k][1].strip() == label or rows[k][1].startswith(label)), None)
+    notes, raw_notes, body = [], [], rows
     if ni is not None:
-        notes = [t.strip() for _, t in rows[ni + 1:] if t.strip()]
+        first_note = rows[ni][1][len(label):].strip() if rows[ni][1].startswith(label) else ''
+        notes = ([first_note] if first_note else []) + [t.strip() for _, t in rows[ni + 1:] if t.strip()]
         body = rows[:ni]
+        raw_notes = notes
         if notes and re.match(r'i[\s.)]', notes[0]):     # strip leading numerals that match their index
             def strip_num(k, t):
                 m = re.match(r'([ivxlc]+)[\s.)]+', t)
@@ -642,13 +666,15 @@ def build(src, out, dry, cli=None):
             paras.append(p._replace(pbb=True) if ln == title[0][0] else p)
 
     last_tib = max((ln for ln, t in rest if has_tib(t)), default=0)
-    for g in groups(rest):
+    gs = groups(rest)
+    for k, g in enumerate(gs):
         if g[0] == 'sep':
             paras.append(P(0, 'Separator', [R('—')]))
         elif g[0] == 'cue':
             paras.append(P(g[1], None, cue_runs(g[2])))
         else:
-            emit(g[1], last_tib, marks, paras)
+            nxt = gs[k + 1][1][0][1] if k + 1 < len(gs) and gs[k + 1][0] == 'grp' else ''
+            emit(g[1], last_tib, marks, paras, first=(k == 0 and tb is None), nxt=nxt)
     if ni is not None:
         paras.append(P(rows[ni][0], 'NotesLabel', plain_runs(label)))
 
@@ -656,9 +682,14 @@ def build(src, out, dry, cli=None):
         hint = ''
         if any(c in runs_text(p.runs) for p in paras for c in '¹²³⁴⁵⁶⁷⁸⁹⁰'):
             hint = '\n  (superscript digits found: old-format text, not supported)'
-        err('build', f'{len(marks)} endnote markers but {len(notes)} notes\n'
-                     f'  markers: {", ".join(f"{m} (line {ln})" for ln, m in marks) or "-"}\n'
-                     f'  notes:   {"; ".join(n[:30] for n in notes) or "-"}{hint}')
+        warn('build', f'{len(marks)} endnote markers but {len(notes)} notes; notes typeset as plain text\n'
+                      f'  markers: {", ".join(f"{m} (line {ln})" for ln, m in marks) or "-"}\n'
+                      f'  notes:   {"; ".join(n[:30] for n in notes) or "-"}{hint}')
+        # ponytail: markers become plain text as written (`,ii` / `^v`), notes keep their numerals
+        paras = [p._replace(runs=[R(r.text) if r.raw and 'endnoteReference' in r.raw else r
+                                  for r in p.runs]) for p in paras]
+        paras += [P(0, 'Colophon', latin_runs(t)) for t in raw_notes]
+        notes = []
     meta.update(resolve_headers(meta, cli, find_title(body, tb)))
     for k in ('header1', 'header2', 'footer'):
         info(f'{k}: {meta[k]}')
@@ -733,6 +764,38 @@ def cmd_selftest(_args):
     assert [p.style for p in paras] == ['Rubric', 'Colophon', 'Heading1'], [p.style for p in paras]
     assert runs_text(paras[1].runs) == 'Zdroj: dudjom.tsadra.org (DJYD-1)'
     assert runs_text(latin_runs('[Web](https://x.org/a) a [x.org](x.org/a/b)')) == 'Web (https://x.org/a) a x.org'
+    def styles(*g, **kw):
+        ps = []
+        emit(list(g), 99, [], ps, **kw)
+        return [p.style for p in ps]
+    tb, la = (1, 'ཀ།', None), (2, 'Název díla', None)
+    assert styles(tb, nxt='## Titul') == ['Heading2Tib'] and styles(tb, nxt='# T') == ['Heading1Tib']   # 1
+    assert styles((1, 'ཚེ་འགུགས་ནི།', None)) == ['Heading1Tib']
+    assert styles((1, '༄༅། །ཀ', None), la, (3, 'Autor', None), first=True) == \
+        ['Heading1Tib', 'Heading1', 'Translation']                                                    # 2
+    assert styles((1, '༄༅། །ཀ', None), (2, 'PŘIVOLÁNÍ VĚDOMÍ', None), first=True)[1] == 'Heading1'
+    assert split_pho(7, 'ཀ༔ ČHI NANG SANG') == [(7, 'ཀ༔'), (7, 'ČHI NANG SANG')]         # 3
+    assert split_pho(7, 'ཀ༔ OM') == [(7, 'ཀ༔ OM')]
+    assert not short('složil Düdžom Rinpočhe')                                                        # 4
+    assert styles((1, 'ཞེས་ཚོགས་པའི་མཐར།', None), (2, 'Na konci zásluh', None)) == ['RubricTib', 'Rubric']  # 5
+    assert styles((1, 'ཀ་ནི།', None), (2, ' '.join(['slovo'] * 13), None))[0] == 'RubricTib'       # 6
+    with tempfile.TemporaryDirectory() as td:                                                         # 7
+        md = Path(td) / 't.md'
+        md.write_text('ཀ\nKA\nA verse,i\n\nPoznámky: První\n', encoding='utf-8')
+        build(md, None, True)
+    with tempfile.TemporaryDirectory() as td:                                                         # 8
+        md, out = Path(td) / 't.md', Path(td) / 'o.docx'
+        md.write_text('ཀ\nKA\nA verse,i\n\nPoznámky:\ni První\nii Druhá\n', encoding='utf-8')
+        with contextlib.redirect_stderr(io.StringIO()) as e:
+            build(md, out, False)
+        assert 'notes typeset as plain text' in e.getvalue(), 'mismatch must warn'
+        z = zipfile.ZipFile(out)
+        doc = z.read('word/document.xml').decode('utf-8')
+        assert '<w:endnoteReference' not in doc and 'A verse,i' in re.sub('<[^>]+>', '', doc), 'markers must stay literal'
+        assert '<w:endnote w:id="1">' not in z.read('word/endnotes.xml').decode('utf-8')
+        seq = re.findall(r'<w:pStyle w:val="(\w+)"/>', doc)
+        assert seq[-3:] == ['NotesLabel', 'Colophon', 'Colophon'], seq
+        assert 'ii Druhá' in doc and 'i První' in doc, 'note numerals preserved'
     print('selftest OK')
     return 0
 
