@@ -36,6 +36,10 @@ INLINE_RE = re.compile(r'\{([^}]*)\}|\*([^*]+)\*|\^?([ivxlc]+)(?=[\s,.;:!?)\]"�
 LINK_RE = re.compile(r'\[([^\]]*)\]\(([^)\s]+)\)')
 CUE_RE = re.compile(r'^(.*?)\s*>>\s*(.+)$')
 H1_TIB_RE = re.compile('ནི\\s*[།༔][།༔\\s]*$')
+VERSE_END_RE = re.compile('(།\\s*།|༔)\\s*$')
+# ponytail: prose instructions end with the terminative -o particle (བྱའོ། །, བཟུང་ངོ་། །); verses rarely do
+PROSE_END_RE = re.compile('ོ་?[།\\s]+$')
+MANTRA_IN_RE = re.compile(r'\b[A-ZÄÖÜČŠŽŇ]{2,}\s+[A-ZÄÖÜČŠŽŇ]{2,}\b')   # mantra words inside an instruction
 IMPERATIVE_RE = re.compile(r'\b\w+(?:te|ete|ěte|jte)\b')
 COVER_BOX = (3564000, 5292000)       # 99 x 147 mm in EMU
 TIB_FONT = 'Jomolhari'               # overridden by front-matter tib_font
@@ -310,10 +314,10 @@ def title_block(rows):
 
 
 def split_pho(ln, t):
-    """Tibetan line with glued CAPS phonetics (>= 2 words) -> [(ln, tibetan), (ln, phonetics)]."""
+    """Tibetan line with glued Latin text (>= 2 words, e.g. CAPS phonetics) -> [(ln, tibetan), (ln, latin)]."""
     end = max((m.end() for m in TIB_RE.finditer(t)), default=0)
     pho = t[end:].strip()
-    if end and len(pho.split()) >= 2 and '>>' not in pho and is_caps(pho):
+    if end and sum(1 for w in pho.split() if re.search(r'[^\W\d_]', w)) >= 2 and '>>' not in pho:
         return [(ln, t[:end].rstrip()), (ln, pho)]
     return [(ln, t)]
 
@@ -369,12 +373,12 @@ def emit(g, last_tib, marks, paras, first=False, nxt=''):
     def add(row, style, **kw):
         paras.append(para(row[0], style, row[1], row[2], marks, **kw))
 
-    def heading(lvl):
+    def heading(lvl, tail='Translation'):
         if tl:
             add(tl, f'Heading{lvl}Tib', tib=True)
         add(L[0], f'Heading{lvl}')
         for r in L[1:]:
-            add(r, 'Translation')
+            add(r, tail, rubric=tail == 'Rubric')
 
     def heuristic():
         info(f'heading(heuristic) line {L[0][0]}: {L[0][1][:60]}')
@@ -386,7 +390,7 @@ def emit(g, last_tib, marks, paras, first=False, nxt=''):
         L[0] = (L[0][0], L[0][1].lstrip('#').strip(), L[0][2])
         heading(lvl)
     elif first and tl and L and tl[1].lstrip().startswith('༄'):          # a2 (before b)
-        heading(1)
+        heading(1, 'Rubric')                                            # author lines italic
     elif tl is None:
         t = L[0][1]
         if is_caps(t):                                                  # i
@@ -414,6 +418,12 @@ def emit(g, last_tib, marks, paras, first=False, nxt=''):
                 add(r, 'Rubric', rubric=True)
     elif H1_TIB_RE.search(tl[1]) and not rub and len(L[0][1].split()) <= 12:   # d
         heading(1)
+    elif (VERSE_END_RE.search(tl[1]) and not rub and 'ནི།' not in tl[1]      # d2
+          and not PROSE_END_RE.search(tl[1]) and not MANTRA_IN_RE.search(L[0][1])
+          and not is_caps(L[0][1]) and not short(L[0][1]) and not L[0][1].rstrip().endswith(':')):
+        info(f'verse(no phonetics) line {tl[0]}: {tl[1][:60]}')
+        add(tl, 'TibVerse', tib=True)
+        add(L[0], 'Translation')
     elif is_caps(L[0][1]):                                              # e
         add(tl, 'TibVerse', tib=True)
         add(L[0], 'MantraPhonetics')
@@ -623,6 +633,15 @@ def build(src, out, dry, cli=None):
         first_note = rows[ni][1][len(label):].strip() if rows[ni][1].startswith(label) else ''
         notes = ([first_note] if first_note else []) + [t.strip() for _, t in rows[ni + 1:] if t.strip()]
         body = rows[:ni]
+        if notes and re.match(r'i[\s.)]', notes[0]):    # inline numerals in one line: split in strict sequence
+            t, parts, k = notes[0], [], 2
+            while True:
+                m = re.compile(r'\s(?=%s[\s.)])' % roman(k)).search(t)
+                if not m:
+                    break
+                parts.append(t[:m.start()].strip())
+                t, k = t[m.end():], k + 1
+            notes[:1] = parts + [t.strip()]
         raw_notes = notes
         if notes and re.match(r'i[\s.)]', notes[0]):     # strip leading numerals that match their index
             def strip_num(k, t):
@@ -777,13 +796,23 @@ def cmd_selftest(_args):
     assert styles(tb, nxt='## Titul') == ['Heading2Tib'] and styles(tb, nxt='# T') == ['Heading1Tib']   # 1
     assert styles((1, 'ཚེ་འགུགས་ནི།', None)) == ['Heading1Tib']
     assert styles((1, '༄༅། །ཀ', None), la, (3, 'Autor', None), first=True) == \
-        ['Heading1Tib', 'Heading1', 'Translation']                                                    # 2
+        ['Heading1Tib', 'Heading1', 'Rubric']                                                         # 2
     assert styles((1, '༄༅། །ཀ', None), (2, 'PŘIVOLÁNÍ VĚDOMÍ', None), first=True)[1] == 'Heading1'
     assert split_pho(7, 'ཀ༔ ČHI NANG SANG') == [(7, 'ཀ༔'), (7, 'ČHI NANG SANG')]         # 3
     assert split_pho(7, 'ཀ༔ OM') == [(7, 'ཀ༔ OM')]
+    assert split_pho(7, 'ཀ། ། Chcete-li provádět praxi') == [(7, 'ཀ། །'), (7, 'Chcete-li provádět praxi')]
+    assert split_pho(7, 'ཀ། Text >> cue words') == [(7, 'ཀ། Text >> cue words')]
     assert not short('složil Düdžom Rinpočhe')                                                        # 4
     assert styles((1, 'ཞེས་ཚོགས་པའི་མཐར།', None), (2, 'Na konci zásluh', None)) == ['RubricTib', 'Rubric']  # 5
+    assert styles((1, 'ཀ། །', None), (2, 'přijměte prosím obětiny.', None)) == ['TibVerse', 'Translation']
+    assert styles((1, 'ཞེས་ཀ། །', None), (2, 'Toto složil Džigdräl.', None)) == ['RubricTib', 'Rubric']
+    assert styles((1, 'ཚིག་བདུན་གསོལ་འདེབས་ནི།', None), (2, 'Sedmiřádková modlitba', None))[0] == 'Heading1Tib'
     assert styles((1, 'ཀ་ནི།', None), (2, ' '.join(['slovo'] * 13), None))[0] == 'RubricTib'       # 6
+    with tempfile.TemporaryDirectory() as td:                                                         # inline notes
+        md, out = Path(td) / 't.md', Path(td) / 'o.docx'
+        md.write_text('ཀ\nKA\nA verse,i\nB,ii\nC,iii\n\nPoznámky: i Prvá. ii Druhá, viz ii. iii Třetí\n', encoding='utf-8')
+        build(md, out, False)
+        assert zipfile.ZipFile(out).read('word/endnotes.xml').decode('utf-8').count('<w:endnote w:id="') == 3, 'inline notes split'
     with tempfile.TemporaryDirectory() as td:                                                         # 7
         md = Path(td) / 't.md'
         md.write_text('ཀ\nKA\nA verse,i\n\nPoznámky: První\n', encoding='utf-8')
@@ -801,6 +830,11 @@ def cmd_selftest(_args):
         seq = re.findall(r'<w:pStyle w:val="(\w+)"/>', doc)
         assert seq[-3:] == ['NotesLabel', 'Colophon', 'Colophon'], seq
         assert 'ii Druhá' in doc and 'i První' in doc, 'note numerals preserved'
+    assert PROSE_END_RE.search('དགེའོ།། །།')          # དགེའོ།། །།
+    assert PROSE_END_RE.search('བསྔོ་བྱའོ། །')          # བྱའོ། །
+    assert not PROSE_END_RE.search('བཞེས་སུ་གསོལ། །')  # གསོལ། །
+    assert MANTRA_IN_RE.search('s pomocí DZA HUNG BAM HO si představte')
+    assert not MANTRA_IN_RE.search('přijměte prosím tyto čisté obětiny.')
     print('selftest OK')
     return 0
 

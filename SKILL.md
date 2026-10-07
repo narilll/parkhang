@@ -70,13 +70,14 @@ line with no Tibetan before it is its own group. First matching rule wins:
 | # | Condition | Result |
 |---|---|---|
 | a | `L[0]` starts `#` / `##` | Heading1 / Heading2 (+ Tibetan line as Heading1Tib / Heading2Tib) |
-| a2 | first group of a body without title block, starts with `༄`, has Latin lines | Heading1Tib + Heading1 (first Latin line) + Translation for the rest (wins over b) |
+| a2 | first group of a body without title block, starts with `༄`, has Latin lines | Heading1Tib + Heading1 (first Latin line) + Rubric (italic) for the rest, e.g. author lines (wins over b) |
 | b | TIB, `len(L)>=2`, `PHO(L[0])` | Verse: TibVerse, Phonetics, Translation for the rest |
 | c | TIB, `len(L)>=2`, not PHO | RubricTib + Rubric per line |
 | d | TIB, 1 Latin line of <= 12 words, Tibetan ends `ནི` + `།`/`༔` | Heading1 (+ Heading1Tib) |
 | e | TIB, 1 Latin line, `CAPS` | Mantra: TibVerse + MantraPhonetics |
 | f | TIB, 1 Latin line, `short()` | Heading2 (+ Heading2Tib) — heuristic, logged |
 | | (d, e-f) Tibetan starting `ཞེས` / `ཅེས` (after `༄༅`) | never a heading: falls to g |
+| d2 | TIB, `len(L)==1`, Tibetan ends with `། །` or `༔`, not a rubric opener, no `ནི།` inside, not ending with the prose particle `-o` (`བྱའོ། །`), Latin not CAPS, not `short()`, not ending with `:`, no mantra words inside | Verse without phonetics: TibVerse + Translation — logged `INFO verse(no phonetics)` |
 | g | TIB, 1 Latin line | RubricTib + Rubric |
 | h | TIB, no Latin line, next group starts `#` / `##` or the line ends `ནི།` | Heading1Tib / Heading2Tib (matching the `#` level; `ནི།` = level 1), no warning |
 | h | TIB, no Latin line, otherwise | TibVerse + warning |
@@ -87,8 +88,9 @@ line with no Tibetan before it is its own group. First matching rule wins:
 
 `short()` is also false for a line wrapped entirely in `*…*` (an italic author line is a rubric, not a heading) and for a
 line whose first letter is lowercase (a continuation such as `složil …`).
-Preprocessing: a `TIB` line followed on the same line by >= 2 CAPS Latin words (glued phonetics) is split into the
-Tibetan line and a phonetics line.
+Preprocessing: a `TIB` line followed on the same line by >= 2 Latin words (glued phonetics or text; not if it contains `>>`)
+is split into the Tibetan line and a Latin line (CAPS then classifies as phonetics). A first note that holds the next
+numerals inline (`i … ii … iii …`, strictly in sequence) is split into one note per numeral.
 Markdown links `[text](url)` become `text` when one contains the other, else `text (url)`.
 
 `short(s)` = at most 8 words, first letter not lowercase, last character not in `.:!,;?`, and no Czech 2nd-person-plural imperative (`\w+te`, `ete`,

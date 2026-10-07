@@ -76,7 +76,9 @@ heading; a lowercase-initial line never is. Tibetan opening with `ཞེས`/`�
 lone Tibetan line before a `#`/`##` heading (or ending `ནི།`) is a Tibetan heading. A first
 group starting with `༄༅` plus Latin lines is the title block. `--dry-run` shows every
 decision. A `#`/`##` prefix forces a heading, a trailing `.` forces a rubric. The notes label
-may carry the first note on its own line.
+may carry the first note on its own line; notes written inline in one line (`i … ii … iii …`) are split. Latin text glued
+after Tibetan on one line is split off, and a Tibetan verse ending `། །`/`༔` with one non-heading Latin line is a verse
+without phonetics. Author lines after the `༄༅` title are italic rubrics.
 
 ### Extensions
 
