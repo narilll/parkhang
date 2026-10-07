@@ -586,11 +586,14 @@ def write_docx(out, paras, notes, meta, img, titlepg):
 # ---------------------------------------------------------------- build
 
 def find_title(body, tb):
-    """Document title for the default header2: body title block, else cover, else first `#` line."""
+    """Document title for the default header2: body title block, else cover, else yig mgo title group, else first `#` line."""
     def clean(t):
         t = re.sub(r'(?<=[,.;:!?…)\]"“”»’])[ivxlc]{1,4}(?=\s|$)', '', demark(split_cue(t)[0]))
         return t.lstrip('#').strip()
     cands = [t for rows in (tb[1], tb[0]) for _, t in rows if not has_tib(t)] if tb else []
+    nb = [t for _, t in body if t.strip()]
+    if not tb and nb and nb[0].lstrip().startswith('༄'):   # yig mgo title group (rule a2)
+        cands += [t for t in nb[1:2] if not has_tib(t)]
     cands += [t for _, t in body if re.match(r'#(?!#)', t)]
     return next((c for c in map(clean, cands) if c), '')
 
@@ -690,7 +693,8 @@ def build(src, out, dry, cli=None):
                                   for r in p.runs]) for p in paras]
         paras += [P(0, 'Colophon', latin_runs(t)) for t in raw_notes]
         notes = []
-    meta.update(resolve_headers(meta, cli, find_title(body, tb)))
+    title = find_title(body, tb) or next((runs_text(p.runs) for p in paras if p.style == 'Heading1'), '')
+    meta.update(resolve_headers(meta, cli, title))
     for k in ('header1', 'header2', 'footer'):
         info(f'{k}: {meta[k]}')
     if dry:
@@ -742,6 +746,7 @@ def cmd_selftest(_args):
     assert resolve_headers({'header2': 'FM'}, {'header2': None}, 'T')['header2'] == 'FM'
     assert resolve_headers({}, {'header2': ''}, 'T')['header2'] == ''
     assert resolve_headers({}, {}, 'T')['header2'] == 'T'
+    assert find_title([(1, '༄༅། །ཚོགས།'), (2, 'DENNÍ OBĚTINA'), (3, 'složil X')], None) == 'DENNÍ OBĚTINA'
     seq = [(re.search(r'<w:pStyle w:val="(\w+)"/>', p) or [None, 'Normal'])[1]
            for p in re.findall(r'<w:p>(.*?)</w:p>', doc)]
     assert seq == EXPECTED, f'pStyle sequence differs:\n{seq}\n{EXPECTED}'
