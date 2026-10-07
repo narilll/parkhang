@@ -1,6 +1,6 @@
 ---
 name: parkhang
-description: Use when the user wants a Word document (.docx) typeset from an interlinear text.md (lotsawa output: Tibetan / UPPERCASE phonetics / translation) in the house print style — cover page, red Tibetan, endnotes. Input is a text.md; output is a .docx only.
+description: Use when the user wants a Word document (.docx) typeset from an interlinear text.md (lotsawa output: Tibetan / UPPERCASE phonetics / translation) in the house print style — cover page, red Tibetan, footnotes. Input is a text.md; output is a .docx only.
 ---
 
 # Parkhang — interlinear text.md → Word .docx
@@ -22,7 +22,7 @@ A lotsawa `text.md` (contract in the lotsawa skill, "Output format"):
   translator-credit paragraph (`Colophon` style). Without front matter the document has no header, no cover image and no
   cover bottom block; the cover is the title block alone and the footer carries only the page number.
 - **Notes** — the last line equal to (or starting with) the notes label (default `Poznámky:`); text after the label on that
-  line is the first note. Then one note per line, each opening with its roman numeral (`i`, `ii`, ...).
+  line is the first note. Then one note per line, each opening with its roman numeral (`i`, `ii`, ...). They become Word footnotes (arabic 1, 2, 3 at the page foot); the label itself is not typeset.
 
 Optional extensions (all invisible to a plain lotsawa text, add only what you need):
 
@@ -35,7 +35,7 @@ Optional extensions (all invisible to a plain lotsawa text, add only what you ne
 | `*x*` | Latin text | Italic (`*ja la la*`) |
 | `#` / `##` prefix | Latin line | Forces heading level 1 / 2 (the `#` is stripped) |
 | `—` alone on a line, or 2+ blank lines | between segments | Separator paragraph (red `—`); one blank line = nothing |
-| Endnote markers `slovo,ii`, `SLOVOi`, `slovo^v` | Latin text, also cover/title | Real Word endnote reference |
+| Footnote markers `slovo,ii`, `SLOVOi`, `slovo^v` | Latin text, also cover/title | Real Word footnote reference (numbered 1, 2, 3 by Word) |
 
 Example (from `scripts/fixture/text.md`):
 
@@ -63,7 +63,7 @@ explicit `^`, AND (2) when it is exactly the next numeral in sequence (`i`, then
 ## Classification
 
 Line types: `TIB` = contains U+0F00–0FFF; `PHO` = single-case letters and none of `, ! ? ; :` (same test as lotsawa
-`looks_like_pho`); `CAPS` = all letters uppercase. `{ } *` and endnote markers are ignored in these checks. A trailing
+`looks_like_pho`); `CAPS` = all letters uppercase. `{ } *` and footnote markers are ignored in these checks. A trailing
 ` >> CUE` is cut off first. A `TIB` line starts a group and takes the following non-blank non-`TIB` lines (`L`); a Latin
 line with no Tibetan before it is its own group. First matching rule wins:
 
@@ -124,7 +124,7 @@ for every heading decided by `short()` — review each one.
    Counts per style: `... --dry-run 2>/dev/null | cut -f2 | sort | uniq -c`.
 
 2. **Build** next to `text.md`, named after the text's folder:
-   `python3 <skill>/scripts/parkhang.py build text.md -o "<folder name>.docx" [--header1 S] [--header2 S] [--footer S]`. Exit 1 = data loss (endnote marker/note
+   `python3 <skill>/scripts/parkhang.py build text.md -o "<folder name>.docx" [--header1 S] [--header2 S] [--footer S]`. Exit 1 = data loss (footnote marker/note
    mismatch, unreadable `cover_image`, unclosed front matter): fix the cause, never ignore it.
 
 3. **Validate:**
@@ -153,8 +153,8 @@ for every heading decided by `short()` — review each one.
    - Rubric italic with bold non-italic mantra words (`OM AH HUNG`).
    - Headings red caps (H1 14 pt, H2 12 pt) under black Tibetan; the body title starts a new page.
    - Cues flush right and red; drum syllables blue; `—` separators red.
-   - Endnote references superscript in the text; lowercase-roman notes at the end under the notes label and Word's
-     separator rule.
+   - Footnote references superscript in the text; footnotes at the foot of the page where the reference sits, numbered
+     1, 2, 3, above Word's separator rule (no notes label in the body).
 
 6. **Report to the user:** the `.docx` path, page count, warnings, count per style (from the dry run), and anything the
    `short()` heuristic decided. State that no PDF is delivered.
@@ -176,7 +176,7 @@ Everything is a named style (sizes in pt, spacing in pt; Normal = Cambria 12, si
 | Heading2Tib / Heading2 (`heading 2`, outline 1) | Jomolhari 14 / Cambria bold caps 12 red | 0/0 / 0/8 |
 | Cue (character) | Cambria bold 10, red | – |
 | Drum (character) | color blue 007BB8 | – |
-| EndnoteReference (character) / EndnoteText | superscript / Cambria 11 | – / 0/7 |
+| FootnoteReference (character) / FootnoteText | superscript / Cambria 10 | – / 0/0 |
 | Header / Footer | Cambria bold 10, right-aligned / red | 0/0 |
 | CoverTib / CoverTitle / CoverSub | Jomolhari 24 / Cambria bold caps 22 red / Cambria 14, all centered | 0/0 |
 | CoverImage | centered, fit into 99 x 147 mm | 0/0 |
@@ -194,7 +194,7 @@ title, and the 36 pt gap above the cover bottom block.
 |---|---|
 | Tibetan blank in the render | Font not visible to LibreOffice: copy it into the bundle (step 0), or `tib_font` names a family that is not installed |
 | Tibetan boxes in Word | Set `tib_font` to the family name the recipient has (e.g. `Jomolhari-ID`) and rebuild |
-| `N endnote markers but M notes` | Marker not recognised (add `^` before the numeral, e.g. `slovo^v`), a stray numeral was taken as a marker, or the notes list is wrong. The message lists both sides. Build still succeeds (warning only): no endnotes, numerals stay as text, notes are plain `Colophon` paragraphs after `NotesLabel` |
+| `N footnote markers but M notes` | Marker not recognised (add `^` before the numeral, e.g. `slovo^v`), a stray numeral was taken as a marker, or the notes list is wrong. The message lists both sides. Build still succeeds (warning only): no footnotes, numerals stay as text, notes are plain `Colophon` paragraphs after `NotesLabel` |
 | Same error plus "superscript digits found" | Old-format text; not supported |
 | Heading misfire | `#` / `##` prefix to force a heading, trailing `.` to force a rubric |
 | Cover bottom block not at the page foot | By design: a fixed 36 pt gap (`GAP` constant), because a bottom-anchored `framePr` lands on the next page in LibreOffice. Pin it to the bottom margin by hand in Word if wanted |
@@ -202,5 +202,5 @@ title, and the 36 pt gap above the cover bottom block.
 
 ## Self-test
 
-`python3 <skill>/scripts/parkhang.py selftest` builds `scripts/fixture/text.md` and asserts the style sequence, endnotes,
+`python3 <skill>/scripts/parkhang.py selftest` builds `scripts/fixture/text.md` and asserts the style sequence, footnotes,
 marker rules and `short()`. Run it after any change to the script.

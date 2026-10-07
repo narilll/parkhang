@@ -7,7 +7,7 @@ Usage:
 
 Segments are classified heuristically (see SKILL.md); optional extensions: front matter
 (header1/header2/footer/cover_*/tib_font/notes_label; header2 defaults to the title), ` >> CUE`, `{SYL}`, `*italic*`,
-`#`/`##` heading override, `—` / 2+ blank lines as separator, endnote markers (`word,ii`,
+`#`/`##` heading override, `—` / 2+ blank lines as separator, footnote markers (`word,ii`,
 `STEZKYi`, `slovo^v`) matched to the lines under the `Poznámky:` label.
 Data loss (marker/note count mismatch, missing cover image) is fatal (exit 1); an
 editorial judgment call is a warning (exit 0). --dry-run lists paragraph styles only.
@@ -100,7 +100,7 @@ def looks_like_pho(line):
 
 
 def demark(s):
-    """Drops {} * and endnote markers (`STEZKYi`, `^v`) so case checks see the bare text."""
+    """Drops {} * and footnote markers (`STEZKYi`, `^v`) so case checks see the bare text."""
     s = re.sub(r'(?<=\S)\^[ivxlc]+', '', re.sub(r'[{}*]', '', s))
     return re.sub(r'([^\W\d_])([ivxlc]+)(?=[\s,.;:!?)\]"”»]|$)',
                   lambda m: m.group(1) if m.group(1).isupper() else m.group(0), s)
@@ -241,7 +241,7 @@ def link_text(m):
 
 
 def latin_runs(text, marks=None, ln=0, rubric=False):
-    """Inline markup -> runs. `marks` (list) collects accepted endnote markers; None = no markers."""
+    """Inline markup -> runs. `marks` (list) collects accepted footnote markers; None = no markers."""
     out, pos = [], 0
     text = LINK_RE.sub(link_text, text)
     seg = rubric_runs if rubric else plain_runs
@@ -255,8 +255,8 @@ def latin_runs(text, marks=None, ln=0, rubric=False):
                 continue                      # literal text
             out += seg(text[pos:m.start()])
             marks.append((ln, m.group(0)))
-            out.append(R(('^' if caret else '') + num, raw='<w:r><w:rPr><w:rStyle w:val="EndnoteReference"/></w:rPr>'
-                                        f'<w:endnoteReference w:id="{len(marks)}"/></w:r>'))
+            out.append(R(('^' if caret else '') + num, raw='<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr>'
+                                        f'<w:footnoteReference w:id="{len(marks)}"/></w:r>'))
         elif drum is not None:
             out += seg(text[pos:m.start()])
             out += plain_runs(drum, rstyle='Drum')
@@ -484,8 +484,8 @@ STYLES = [
      dict(b=True, caps=True, color=RED, sz=24)),
     ('Cue', 'Cue', None, 'c', {}, dict(b=True, sz=20, color=RED)),
     ('Drum', 'Drum', None, 'c', {}, dict(color=BLUE)),
-    ('EndnoteReference', 'endnote reference', None, 'c', {}, dict(sup=True)),
-    ('EndnoteText', 'endnote text', 'Normal', 'p', dict(after=140), dict(sz=22)),
+    ('FootnoteReference', 'footnote reference', None, 'c', {}, dict(sup=True)),
+    ('FootnoteText', 'footnote text', 'Normal', 'p', {}, dict(sz=20)),
     ('Header', 'header', 'Normal', 'p', dict(jc='right'), dict(b=True, sz=20)),
     ('Footer', 'footer', 'Normal', 'p', {}, dict(b=True, sz=20, color=RED)),
     ('CoverTib', 'CoverTib', 'Normal', 'p', dict(jc='center'), dict(tib=True, sz=48)),
@@ -518,16 +518,16 @@ def styles_xml():
 
 # ---------------------------------------------------------------- package
 
-def endnotes_xml(notes):
-    sep = ('<w:endnote w:type="{t}" w:id="{i}"><w:p><w:pPr><w:spacing w:after="0" w:line="240" '
-           'w:lineRule="auto"/></w:pPr><w:r><w:{t}/></w:r></w:p></w:endnote>')
-    out = XML + f'<w:endnotes {NS}>' + sep.format(t='separator', i=-1) \
+def footnotes_xml(notes):
+    sep = ('<w:footnote w:type="{t}" w:id="{i}"><w:p><w:pPr><w:spacing w:after="0" w:line="240" '
+           'w:lineRule="auto"/></w:pPr><w:r><w:{t}/></w:r></w:p></w:footnote>')
+    out = XML + f'<w:footnotes {NS}>' + sep.format(t='separator', i=-1) \
         + sep.format(t='continuationSeparator', i=0)
     for n, text in enumerate(notes, 1):
-        out += (f'<w:endnote w:id="{n}"><w:p>{ppr("EndnoteText")}'
-                '<w:r><w:rPr><w:rStyle w:val="EndnoteReference"/></w:rPr><w:endnoteRef/></w:r>'
-                f'<w:r><w:t xml:space="preserve"> </w:t></w:r>{runs_xml(latin_runs(text))}</w:p></w:endnote>')
-    return out + '</w:endnotes>'
+        out += (f'<w:footnote w:id="{n}"><w:p>{ppr("FootnoteText")}'
+                '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>'
+                f'<w:r><w:t xml:space="preserve"> </w:t></w:r>{runs_xml(latin_runs(text))}</w:p></w:footnote>')
+    return out + '</w:footnotes>'
 
 
 def write_docx(out, paras, notes, meta, img, titlepg):
@@ -535,7 +535,7 @@ def write_docx(out, paras, notes, meta, img, titlepg):
     has_h = bool(meta.get('header1') or meta.get('header2'))
     ct = ('application/vnd.openxmlformats-officedocument.wordprocessingml.', '+xml')
     over = [('/word/document.xml', 'document.main'), ('/word/styles.xml', 'styles'),
-            ('/word/settings.xml', 'settings'), ('/word/endnotes.xml', 'endnotes'),
+            ('/word/settings.xml', 'settings'), ('/word/footnotes.xml', 'footnotes'),
             ('/word/footer1.xml', 'footer')]
     if has_h:
         over.append(('/word/header1.xml', 'header'))
@@ -549,7 +549,7 @@ def write_docx(out, paras, notes, meta, img, titlepg):
     root_rels = (XML + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
                  f'<Relationship Id="rId1" Type="{REL}/officeDocument" Target="word/document.xml"/></Relationships>')
     rels = [('rId1', 'styles', 'styles.xml'), ('rId2', 'settings', 'settings.xml'),
-            ('rId3', 'endnotes', 'endnotes.xml'), ('rId5', 'footer', 'footer1.xml')]
+            ('rId3', 'footnotes', 'footnotes.xml'), ('rId5', 'footer', 'footer1.xml')]
     if has_h:
         rels.append(('rId4', 'header', 'header1.xml'))
     if img:
@@ -560,7 +560,6 @@ def write_docx(out, paras, notes, meta, img, titlepg):
     sect = ('<w:sectPr>'
             + ('<w:headerReference w:type="default" r:id="rId4"/>' if has_h else '')
             + '<w:footerReference w:type="default" r:id="rId5"/>'
-            '<w:endnotePr><w:numFmt w:val="lowerRoman"/></w:endnotePr>'
             '<w:pgSz w:w="11906" w:h="16838"/>'
             '<w:pgMar w:top="1417" w:right="1417" w:bottom="1134" w:left="1417" w:header="720" '
             'w:footer="709" w:gutter="0"/><w:cols w:space="708"/>'
@@ -571,7 +570,7 @@ def write_docx(out, paras, notes, meta, img, titlepg):
                 + ''.join(p_xml(p) for p in paras) + sect + '</w:body></w:document>')
     settings = (XML + f'<w:settings {NS}><w:defaultTabStop w:val="708"/>'
                 '<w:characterSpacingControl w:val="doNotCompress"/>'
-                '<w:endnotePr><w:numFmt w:val="lowerRoman"/><w:endnote w:id="-1"/><w:endnote w:id="0"/></w:endnotePr>'
+                '<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>'
                 '<w:compat><w:compatSetting w:name="compatibilityMode" '
                 'w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>')
     footer = (XML + f'<w:ftr {NS}><w:p>{ppr("Footer")}{runs_xml(latin_runs(meta.get("footer", "")))}'
@@ -583,7 +582,7 @@ def write_docx(out, paras, notes, meta, img, titlepg):
         z.writestr('word/document.xml', document)
         z.writestr('word/styles.xml', styles_xml())
         z.writestr('word/settings.xml', settings)
-        z.writestr('word/endnotes.xml', endnotes_xml(notes))
+        z.writestr('word/footnotes.xml', footnotes_xml(notes))
         z.writestr('word/footer1.xml', footer)
         if has_h:
             hp = ''.join(f'<w:p>{ppr("Header")}{runs_xml(latin_runs(meta[k]))}</w:p>'
@@ -697,19 +696,18 @@ def build(src, out, dry, cli=None):
         else:
             nxt = gs[k + 1][1][0][1] if k + 1 < len(gs) and gs[k + 1][0] == 'grp' else ''
             emit(g[1], last_tib, marks, paras, first=(k == 0 and tb is None), nxt=nxt)
-    if ni is not None:
-        paras.append(P(rows[ni][0], 'NotesLabel', plain_runs(label)))
-
     if len(marks) != len(notes):
         hint = ''
         if any(c in runs_text(p.runs) for p in paras for c in '¹²³⁴⁵⁶⁷⁸⁹⁰'):
             hint = '\n  (superscript digits found: old-format text, not supported)'
-        warn('build', f'{len(marks)} endnote markers but {len(notes)} notes; notes typeset as plain text\n'
+        warn('build', f'{len(marks)} footnote markers but {len(notes)} notes; notes typeset as plain text\n'
                       f'  markers: {", ".join(f"{m} (line {ln})" for ln, m in marks) or "-"}\n'
                       f'  notes:   {"; ".join(n[:30] for n in notes) or "-"}{hint}')
         # ponytail: markers become plain text as written (`,ii` / `^v`), notes keep their numerals
-        paras = [p._replace(runs=[R(r.text) if r.raw and 'endnoteReference' in r.raw else r
+        paras = [p._replace(runs=[R(r.text) if r.raw and 'footnoteReference' in r.raw else r
                                   for r in p.runs]) for p in paras]
+        if ni is not None:
+            paras.append(P(rows[ni][0], 'NotesLabel', plain_runs(label)))
         paras += [P(0, 'Colophon', latin_runs(t)) for t in raw_notes]
         notes = []
     title = find_title(body, tb) or next((runs_text(p.runs) for p in paras if p.style == 'Heading1'), '')
@@ -722,7 +720,7 @@ def build(src, out, dry, cli=None):
     finish('build')
     if not dry:
         write_docx(out, paras, notes, meta, img, tb is not None)
-        print(f'{out}: {len(paras)} paragraphs, {len(notes)} endnotes')
+        print(f'{out}: {len(paras)} paragraphs, {len(notes)} footnotes')
     return paras
 
 
@@ -737,7 +735,7 @@ EXPECTED = (
      'TibVerse', 'Phonetics', 'Translation', 'Normal',          # verse 1, cue-only
      'TibVerse', 'Phonetics', 'Translation',                    # verse 2
      'Separator', 'Heading1', 'Separator',                      # 2 blanks, `#`, `—`
-     'RubricTib', 'Rubric', 'Colophon', 'NotesLabel'])
+     'RubricTib', 'Rubric', 'Colophon'])
 
 
 def marks_of(s, nxt):
@@ -753,7 +751,8 @@ def cmd_selftest(_args):
         build(fixture, out, False)
         z = zipfile.ZipFile(out)
         doc = z.read('word/document.xml').decode('utf-8')
-        endn = z.read('word/endnotes.xml').decode('utf-8')
+        fn = z.read('word/footnotes.xml').decode('utf-8')
+        pkg = '\n'.join(z.read(n).decode('utf-8', 'ignore') + n for n in z.namelist() if not n.startswith('word/media'))
         hdr = z.read('word/header1.xml').decode('utf-8')
     assert 'Překlad pro vnitřní použití' in hdr, 'fixture header2 lost'
     with tempfile.TemporaryDirectory() as td:
@@ -769,9 +768,10 @@ def cmd_selftest(_args):
     seq = [(re.search(r'<w:pStyle w:val="(\w+)"/>', p) or [None, 'Normal'])[1]
            for p in re.findall(r'<w:p>(.*?)</w:p>', doc)]
     assert seq == EXPECTED, f'pStyle sequence differs:\n{seq}\n{EXPECTED}'
-    assert len(re.findall(r'<w:endnote w:id="\d+">', endn)) == 3, 'expected 3 endnotes'
-    assert re.search(r'<w:sectPr>.*lowerRoman.*</w:sectPr>', doc, re.S), 'lowerRoman missing in sectPr'
-    assert doc.count('<w:endnoteReference') == 3, 'expected 3 endnote references'
+    assert len(re.findall(r'<w:footnote w:id="\d+">', fn)) == 3, 'expected 3 footnotes'
+    assert 'lowerRoman' not in doc + fn and 'endnote' not in pkg.lower(), 'endnote leftovers in package'
+    assert doc.count('<w:footnoteReference') == 3, 'expected 3 footnote references'
+    assert 'NotesLabel' not in doc, 'notes label must not remain when notes become footnotes'
     text = re.findall(r'<w:t xml:space="preserve">(.*?)</w:t>', doc, re.S)
     for bad in ('{', '}', '>>', '&gt;&gt;', '*'):
         assert not any(bad in t for t in text), f'leftover {bad!r} in w:t'
@@ -812,7 +812,7 @@ def cmd_selftest(_args):
         md, out = Path(td) / 't.md', Path(td) / 'o.docx'
         md.write_text('ཀ\nKA\nA verse,i\nB,ii\nC,iii\n\nPoznámky: i Prvá. ii Druhá, viz ii. iii Třetí\n', encoding='utf-8')
         build(md, out, False)
-        assert zipfile.ZipFile(out).read('word/endnotes.xml').decode('utf-8').count('<w:endnote w:id="') == 3, 'inline notes split'
+        assert zipfile.ZipFile(out).read('word/footnotes.xml').decode('utf-8').count('<w:footnote w:id="') == 3, 'inline notes split'
     with tempfile.TemporaryDirectory() as td:                                                         # 7
         md = Path(td) / 't.md'
         md.write_text('ཀ\nKA\nA verse,i\n\nPoznámky: První\n', encoding='utf-8')
@@ -825,8 +825,8 @@ def cmd_selftest(_args):
         assert 'notes typeset as plain text' in e.getvalue(), 'mismatch must warn'
         z = zipfile.ZipFile(out)
         doc = z.read('word/document.xml').decode('utf-8')
-        assert '<w:endnoteReference' not in doc and 'A verse,i' in re.sub('<[^>]+>', '', doc), 'markers must stay literal'
-        assert '<w:endnote w:id="1">' not in z.read('word/endnotes.xml').decode('utf-8')
+        assert '<w:footnoteReference' not in doc and 'A verse,i' in re.sub('<[^>]+>', '', doc), 'markers must stay literal'
+        assert '<w:footnote w:id="1">' not in z.read('word/footnotes.xml').decode('utf-8')
         seq = re.findall(r'<w:pStyle w:val="(\w+)"/>', doc)
         assert seq[-3:] == ['NotesLabel', 'Colophon', 'Colophon'], seq
         assert 'ii Druhá' in doc and 'i První' in doc, 'note numerals preserved'
