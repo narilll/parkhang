@@ -2,11 +2,11 @@
 """Typeset an interlinear text.md (lotsawa output) into a Word .docx in the house print style.
 
 Usage:
-  parkhang.py build text.md -o out.docx [--dry-run]
+  parkhang.py build text.md -o out.docx [--dry-run] [--header1 S] [--header2 S] [--footer S]
   parkhang.py selftest
 
 Segments are classified heuristically (see SKILL.md); optional extensions: front matter
-(header1/header2/footer/cover_*/tib_font/notes_label), ` >> CUE`, `{SYL}`, `*italic*`,
+(header1/header2/footer/cover_*/tib_font/notes_label; header2 defaults to the title), ` >> CUE`, `{SYL}`, `*italic*`,
 `#`/`##` heading override, `—` / 2+ blank lines as separator, endnote markers (`word,ii`,
 `STEZKYi`, `slovo^v`) matched to the lines under the `Poznámky:` label.
 Data loss (marker/note count mismatch, missing cover image) is fatal (exit 1); an
@@ -565,7 +565,26 @@ def write_docx(out, paras, notes, meta, img, titlepg):
 
 # ---------------------------------------------------------------- build
 
-def build(src, out, dry):
+def find_title(body, tb):
+    """Document title for the default header2: body title block, else cover, else first `#` line."""
+    def clean(t):
+        t = re.sub(r'(?<=[,.;:!?…)\]"“”»’])[ivxlc]{1,4}(?=\s|$)', '', demark(split_cue(t)[0]))
+        return t.lstrip('#').strip()
+    cands = [t for rows in (tb[1], tb[0]) for _, t in rows if not has_tib(t)] if tb else []
+    cands += [t for _, t in body if re.match(r'#(?!#)', t)]
+    return next((c for c in map(clean, cands) if c), '')
+
+
+def resolve_headers(meta, cli, title):
+    """CLI (None = not given; '' suppresses) > front matter > default (header2 = title)."""
+    h = {k: meta.get(k, '') for k in ('header1', 'header2', 'footer')}
+    if 'header2' not in meta:
+        h['header2'] = title
+    h.update({k: v for k, v in (cli or {}).items() if v is not None})
+    return h
+
+
+def build(src, out, dry, cli=None):
     lines = Path(src).read_text(encoding='utf-8').split('\n')
     meta, fm = parse_front(lines)
     global TIB_FONT
@@ -640,6 +659,9 @@ def build(src, out, dry):
         err('build', f'{len(marks)} endnote markers but {len(notes)} notes\n'
                      f'  markers: {", ".join(f"{m} (line {ln})" for ln, m in marks) or "-"}\n'
                      f'  notes:   {"; ".join(n[:30] for n in notes) or "-"}{hint}')
+    meta.update(resolve_headers(meta, cli, find_title(body, tb)))
+    for k in ('header1', 'header2', 'footer'):
+        info(f'{k}: {meta[k]}')
     if dry:
         for p in paras:
             print(f'{p.lineno}\t{p.style or "Normal"}\t{runs_text(p.runs)[:60]}')
@@ -678,6 +700,17 @@ def cmd_selftest(_args):
         z = zipfile.ZipFile(out)
         doc = z.read('word/document.xml').decode('utf-8')
         endn = z.read('word/endnotes.xml').decode('utf-8')
+        hdr = z.read('word/header1.xml').decode('utf-8')
+    assert 'Překlad pro vnitřní použití' in hdr, 'fixture header2 lost'
+    with tempfile.TemporaryDirectory() as td:
+        md, out = Path(td) / 't.md', Path(td) / 'o.docx'
+        md.write_text('# TITLE\nཀ\nKA\nA verse.\n', encoding='utf-8')
+        build(md, out, False)
+        assert 'TITLE' in zipfile.ZipFile(out).read('word/header1.xml').decode('utf-8'), 'default header2'
+    assert resolve_headers({'header2': 'FM'}, {'header2': 'CLI', 'footer': None}, 'T')['header2'] == 'CLI'
+    assert resolve_headers({'header2': 'FM'}, {'header2': None}, 'T')['header2'] == 'FM'
+    assert resolve_headers({}, {'header2': ''}, 'T')['header2'] == ''
+    assert resolve_headers({}, {}, 'T')['header2'] == 'T'
     seq = [(re.search(r'<w:pStyle w:val="(\w+)"/>', p) or [None, 'Normal'])[1]
            for p in re.findall(r'<w:p>(.*?)</w:p>', doc)]
     assert seq == EXPECTED, f'pStyle sequence differs:\n{seq}\n{EXPECTED}'
@@ -713,7 +746,10 @@ def main():
     p.add_argument('text')
     p.add_argument('-o', '--out')
     p.add_argument('--dry-run', action='store_true')
-    p.set_defaults(fn=lambda a: build(a.text, a.out, a.dry_run) and 0)
+    for k in ('header1', 'header2', 'footer'):
+        p.add_argument(f'--{k}')
+    p.set_defaults(fn=lambda a: build(a.text, a.out, a.dry_run,
+                                      {k: getattr(a, k) for k in ('header1', 'header2', 'footer')}) and 0)
     p = sub.add_parser('selftest')
     p.set_defaults(fn=cmd_selftest)
     args = ap.parse_args()

@@ -28,7 +28,7 @@ Optional extensions (all invisible to a plain lotsawa text, add only what you ne
 
 | Extension | Where | Effect |
 |---|---|---|
-| Front matter `---` … `---` | top of file, flat `key: value` | `header1`, `header2` (header lines, right-aligned; no header key = no header), `footer` (text before the page number), `cover_image` (path relative to the md), `cover_tib`, `cover_publisher`, `cover_year` (bottom block of the cover), `tib_font` (default `Jomolhari`), `notes_label` (default `Poznámky:`) |
+| Front matter `---` … `---` | top of file, flat `key: value` | `header1`, `header2` (header lines, right-aligned; `header2` defaults to the document title: body title, else cover title, else first `#` line; `header1` has no default, pass the cycle name via front matter or `--header1`; no header text at all = no header), `footer` (text before the page number), `cover_image` (path relative to the md), `cover_tib`, `cover_publisher`, `cover_year` (bottom block of the cover), `tib_font` (default `Jomolhari`), `notes_label` (default `Poznámky:`) |
 | ` >> CUE` | end of any line | Cue label flush right, red bold (e.g. `>> MELODIE`) |
 | `>> CUE` alone | own line | Cue-only paragraph (style `Normal`), e.g. `>> ࿂࿄ / ZILŇEN ࿃🥁`; Tibetan ornaments in the cue use the Tibetan font, 10 pt red |
 | `{SYL}` | phonetics | Blue drum syllable (`{DÜN}`) |
@@ -110,10 +110,13 @@ for every heading decided by `short()` — review each one.
 
 1. **Dry run.** `python3 <skill>/scripts/parkhang.py build text.md --dry-run` prints `lineno<TAB>STYLE<TAB>text[:60]` per
    paragraph on stdout and INFO/WARN lines on stderr. Review the INFO heading lines and warnings; fix the md if needed.
+   The `INFO header1/header2/footer: ...` lines show what the document will carry; set them with front matter or the
+   `build` options `--header1 S --header2 S --footer S` (CLI wins over front matter; `--header2 ""` suppresses a line), e.g.
+   `--header1 "DÜDŽOM TERSAR / PUDRI REKPUNG" --footer "ORGYEN KHANDRO LING"`.
    Counts per style: `... --dry-run 2>/dev/null | cut -f2 | sort | uniq -c`.
 
 2. **Build** next to `text.md`, named after the text's folder:
-   `python3 <skill>/scripts/parkhang.py build text.md -o "<folder name>.docx"`. Exit 1 = data loss (endnote marker/note
+   `python3 <skill>/scripts/parkhang.py build text.md -o "<folder name>.docx" [--header1 S] [--header2 S] [--footer S]`. Exit 1 = data loss (endnote marker/note
    mismatch, unreadable `cover_image`, unclosed front matter): fix the cause, never ignore it.
 
 3. **Validate:**
