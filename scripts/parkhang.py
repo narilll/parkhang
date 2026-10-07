@@ -472,7 +472,7 @@ STYLES = [
     ('Normal', 'Normal', None, 'p', dict(tabs=True), {}),
     ('TibVerse', 'TibVerse', 'Normal', 'p', dict(keep=True), dict(tib=True, sz=38, color=RED)),
     ('Phonetics', 'Phonetics', 'Normal', 'p', dict(keep=True), dict(b=True, sz=24)),
-    ('MantraPhonetics', 'MantraPhonetics', 'Phonetics', 'p', dict(keep=False, after=140), {}),
+    ('MantraPhonetics', 'MantraPhonetics', 'Phonetics', 'p', dict(keep=True, after=140), {}),   # keepNext: a mantra opening a section must not end a page
     ('Translation', 'Translation', 'Normal', 'p', dict(after=140), dict(sz=24)),
     ('Separator', 'Separator', 'Normal', 'p', dict(before=140), dict(color=RED)),
     ('RubricTib', 'RubricTib', 'Normal', 'p', dict(keep=True), dict(tib=True, sz=28)),
@@ -481,7 +481,7 @@ STYLES = [
     ('Heading1', 'heading 1', 'Normal', 'p', dict(keep=True, after=320, outline=0),
      dict(b=True, caps=True, color=RED, sz=28)),
     ('Heading2Tib', 'Heading2Tib', 'Normal', 'p', dict(keep=True), dict(tib=True, sz=28)),
-    ('Heading2', 'heading 2', 'Normal', 'p', dict(after=160, outline=1),
+    ('Heading2', 'heading 2', 'Normal', 'p', dict(keep=True, after=160, outline=1),
      dict(b=True, caps=True, color=RED, sz=24)),
     ('Cue', 'Cue', None, 'c', {}, dict(b=True, sz=20, color=RED)),
     ('Drum', 'Drum', None, 'c', {}, dict(color=BLUE)),

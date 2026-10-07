@@ -167,13 +167,13 @@ Everything is a named style (sizes in pt, spacing in pt; Normal = Cambria 12, si
 |---|---|---|
 | TibVerse | Jomolhari 19, red C00000, keepNext | 0/0 |
 | Phonetics | Cambria bold 12, keepNext | 0/0 |
-| MantraPhonetics (based on Phonetics) | as Phonetics, keepNext off | 0/7 |
+| MantraPhonetics (based on Phonetics) | as Phonetics, keepNext (a mantra opening a section never ends a page) | 0/7 |
 | Translation | Cambria 12 | 0/7 |
 | Separator | Cambria 12, red | 7/0 |
 | RubricTib | Jomolhari 14, keepNext | 0/0 |
 | Rubric | Cambria italic 11 | 0/7 |
 | Heading1Tib / Heading1 (`heading 1`, outline 0) | Jomolhari 18 / Cambria bold caps 14 red | 0/0 / 0/16, keepNext |
-| Heading2Tib / Heading2 (`heading 2`, outline 1) | Jomolhari 14 / Cambria bold caps 12 red | 0/0 / 0/8 |
+| Heading2Tib / Heading2 (`heading 2`, outline 1) | Jomolhari 14 / Cambria bold caps 12 red | 0/0 / 0/8, keepNext |
 | Cue (character) | Cambria bold 10, red | – |
 | Drum (character) | color blue 007BB8 | – |
 | FootnoteReference (character) / FootnoteText | superscript / Cambria 10 | – / 0/0 |
