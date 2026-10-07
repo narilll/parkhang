@@ -250,7 +250,8 @@ def latin_runs(text, marks=None, ln=0, rubric=False):
         if num is not None:
             prev = text[m.start() - 1] if m.start() else ''
             caret = m.group(0).startswith('^')
-            ok = caret or (prev != '' and (prev in NOTE_PUNCT or prev.isupper()))
+            word = re.search(r'[^\W\d_]+$', text[:m.start()])        # word glued before the numeral
+            ok = caret or prev in NOTE_PUNCT and prev != '' or bool(word and len(word.group()) >= 2 and word.group().isupper())
             if marks is None or not ok or num != roman(len(marks) + 1):
                 continue                      # literal text
             out += seg(text[pos:m.start()])
@@ -778,6 +779,7 @@ def cmd_selftest(_args):
     assert [roman(n) for n in range(1, 16)] == \
         'i ii iii iv v vi vii viii ix x xi xii xiii xiv xv'.split(), 'roman'
     assert marks_of('moudrosti,ii', 2) and marks_of('STEZKYi', 1) and marks_of('slovo^v', 5)
+    assert not marks_of('Ti spolu s nimi', 1) and not marks_of('Ai', 1), 'single capital + numeral is a word, not a marker'
     assert not marks_of('siddhi', 1) and not marks_of('v Praze', 5) and not marks_of('(i)', 1)
     assert short('Dar Dharmy') and not short('Recitujte třikrát') and not short('Takto ji nabídněte.')
     assert not short('*složil Düdžom Rinpočhe*') and short('*Dar* Dharmy')
